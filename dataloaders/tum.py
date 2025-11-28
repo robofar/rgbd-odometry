@@ -1,0 +1,165 @@
+import importlib
+import os
+from pathlib import Path
+
+import numpy as np
+import open3d as o3d
+
+# https://cvg.cit.tum.de/data/datasets/rgbd-dataset
+
+
+# helpers for TUM RGBD
+def parse_list(filepath, skiprows=0):
+    """ read list data """
+    data = np.loadtxt(filepath, delimiter=' ', dtype=np.unicode_, skiprows=skiprows)
+    return data
+
+
+def associate_frames(tstamp_image, tstamp_depth, tstamp_pose, max_dt=0.08):
+    """ pair images, depths, and poses """
+    associations = []
+    for i, t in enumerate(tstamp_image):
+        if tstamp_pose is None:
+            j = np.argmin(np.abs(tstamp_depth - t))
+            if (np.abs(tstamp_depth[j] - t) < max_dt):
+                associations.append((i, j))
+        else:
+            j = np.argmin(np.abs(tstamp_depth - t))
+            k = np.argmin(np.abs(tstamp_pose - t))
+
+            if (np.abs(tstamp_depth[j] - t) < max_dt) and \
+                    (np.abs(tstamp_pose[k] - t) < max_dt):
+                associations.append((i, j, k))
+    return associations
+
+
+def pose_matrix_from_quaternion(pvec):
+    """ convert 4x4 pose matrix to (t, q) """
+    from scipy.spatial.transform import Rotation
+    pose = np.eye(4)
+    pose[:3, :3] = Rotation.from_quat(pvec[3:]).as_matrix() # rotation
+    pose[:3, 3] = pvec[:3] # translation
+    return pose
+
+
+
+
+class TUMDataset:
+    def __init__(self, data_path: Path, sequence: str, *_, **__):
+        sequence_path = os.path.join(data_path, sequence)
+        
+        self.contains_image: bool = True
+        self.is_rgbd: bool = True
+
+        self.rgb_frames, self.depth_frames, self.gt_poses = self.loadtum(sequence_path)
+
+        self.intrinsic = o3d.camera.PinholeCameraIntrinsic()
+        H, W = 480, 640
+        self.cam_height = H
+        self.cam_width = W
+
+        if "freiburg1" in sequence:
+            self.fx, self.fy, self.cx, self.cy = 517.3, 516.5, 318.6, 255.3
+        elif "freiburg2" in sequence:
+            self.fx, self.fy, self.cx, self.cy  = 520.9, 521.0, 325.1, 249.7
+        elif "freiburg3" in sequence:
+            self.fx, self.fy, self.cx, self.cy  = 535.4, 539.2, 320.1, 247.6        
+        else: # default
+            self.fx, self.fy, self.cx, self.cy  = 525.0, 525.0, 319.5, 239.5
+        
+        self.depth_scale = 5000.0
+
+        self.intrinsic.set_intrinsics(height=H,
+                                     width=W,
+                                     fx=self.fx,
+                                     fy=self.fy,
+                                     cx=self.cx,
+                                     cy=self.cy)
+
+
+        self.K = np.eye(3)
+        self.K[0,0]=self.fx
+        self.K[1,1]=self.fy
+        self.K[0,2]=self.cx
+        self.K[1,2]=self.cy
+
+        self.T_l_c = np.eye(4)
+        self.T_c_l = np.linalg.inv(self.T_l_c)
+        self.extrinsic = self.T_c_l
+
+        self.down_sample_on = False
+        self.rand_down_rate = 0.1
+    
+
+
+    def __len__(self):
+        return len(self.depth_frames)
+
+
+    def loadtum(self, datapath, frame_rate=-1):
+        """ read video data in tum-rgbd format """
+        if os.path.isfile(os.path.join(datapath, 'groundtruth.txt')):
+            pose_list = os.path.join(datapath, 'groundtruth.txt')
+
+        image_list = os.path.join(datapath, 'rgb.txt')
+        depth_list = os.path.join(datapath, 'depth.txt')
+
+        image_data = parse_list(image_list)
+        depth_data = parse_list(depth_list)
+        pose_data = parse_list(pose_list, skiprows=1)
+        pose_vecs = pose_data[:, 1:].astype(np.float64)
+
+        tstamp_image = image_data[:, 0].astype(np.float64)
+        tstamp_depth = depth_data[:, 0].astype(np.float64)
+        tstamp_pose = pose_data[:, 0].astype(np.float64)
+        associations = associate_frames(tstamp_image, tstamp_depth, tstamp_pose)
+
+        indicies = [0]
+        for i in range(1, len(associations)):
+            t0 = tstamp_image[associations[indicies[-1]][0]]
+            t1 = tstamp_image[associations[i][0]]
+            if t1 - t0 > 1.0 / frame_rate:
+                indicies += [i]
+        
+        images, poses, depths = [], [], []
+        for ix in indicies:
+            (i, j, k) = associations[ix]
+            images += [os.path.join(datapath, image_data[i, 1])]
+            depths += [os.path.join(datapath, depth_data[j, 1])]
+            c2w = pose_matrix_from_quaternion(pose_vecs[k])
+            poses += [c2w]
+        
+
+        poses = np.array(poses)
+
+        return images, depths, poses
+
+
+    def __getitem__(self, idx): 
+        im_color = o3d.io.read_image(self.rgb_frames[idx])
+        im_depth = o3d.io.read_image(self.depth_frames[idx]) 
+        rgbd_image = o3d.geometry.RGBDImage.create_from_tum_format(im_color, im_depth, convert_rgb_to_intensity=False)
+        
+        pcd = o3d.geometry.PointCloud.create_from_rgbd_image(
+            rgbd_image,
+            self.intrinsic,
+            self.extrinsic
+        )
+
+        if self.down_sample_on:
+            pcd = pcd.random_down_sample(sampling_ratio=self.rand_down_rate)
+        
+
+        points_xyz = np.array(pcd.points, dtype=np.float64)
+        points_rgb = np.array(pcd.colors, dtype=np.float64)
+        points_xyzrgb = np.hstack((points_xyz, points_rgb))
+
+        rgb_image = np.array(im_color)
+        depth_image = np.expand_dims(np.array(im_depth)/self.depth_scale, axis=-1)
+
+        frame_data = {"points": points_xyzrgb, "img": rgb_image, "depth": depth_image}
+
+        return frame_data 
+
+        
+

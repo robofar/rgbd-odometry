@@ -1,0 +1,7 @@
+setting:
+  name: "rgbd_tum_slam"
+  data_loader_name: "tum"
+  data_loader_seq: "fr1xyz"
+
+tracking:
+  track_on: True
