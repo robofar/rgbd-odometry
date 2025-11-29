@@ -3,7 +3,7 @@
 ## 🚀 Pipeline Overview
 <details>
 <summary>Details (click to expand)</summary>
-The pipeline processes incoming RGB-D frames sequentially to estimate the camera pose and incrementally build a (local) map of features.
+The pipeline processes incoming RGB-D frames sequentially to estimate the camera pose utilizing local map of features.
 
 ### 1. Feature Extraction (Incoming Frame)
 
@@ -11,7 +11,7 @@ For every incoming RGB-D frame, ORB algorithm is used to detect keypoints and co
 
 ### 2. Pose Estimation (Frame-to-Map Matching)
 
-For all frames following the initial frame (`frame_id > 0`), the camera's current pose is estimated by matching the newly extracted frame features against the existing features in the local map.
+For all frames following the initial frame, the camera's current pose is estimated by matching the newly extracted frame features against the existing features in the local map.
 
 The estimation process follows these steps:
   
@@ -21,20 +21,15 @@ The estimation process follows these steps:
 
 - **Pose Optimization (3D-2D Reprojection)**: The inlier correspondences are used to minimize the 3D-2D reprojection error, where camera pose is optimized. This minimization is performed using the weighted Least Squares (Gauss-Newton method).
 
-- Robustness: To handle potential outliers and measurement noise during optimization, the reprojection error is weighted using a robust L1-norm kernel.
-
-### 3. Map Management (Voxel Grid)
-Once the optimized camera pose is obtained, the 2D features detected in the current frame are projected into the 3D world coordinate frame using their depth values and the estimated camera pose. The projected 3D features are then stored in a spatially partitioned map.
+### 3. Map Management (Sparse Voxel Grid)
+Once the optimized camera pose is obtained, the 2D features detected in the current frame are projected into the 3D world coordinate frame using their depth values and the estimated camera pose. The projected 3D features are then stored in a sparse voxel grid map.
 
 - **Voxel Grid Implementation**: The map is implemented as a Hash Table where the keys correspond to the 3D coordinates of the voxels.
 - **Density Control**: Each voxel is limited to storing a maximum of $N_{max}$ number of features.
 - **Feature Update Policy (FIFO)**: A First-In, First-Out (FIFO) replacement policy is implemented within each voxel. When a voxel is full, and the new feature projects to that voxel, the oldest feature is discarded, ensuring that the map always retains the newest and most relevant spatial information.
-
-### 4. Local Map Reset Policy
-
-- **Radius Threshold**: The local map is centered around the latest estimated camera pose. Features that fall inside a predefined spatial radius from this pose are part of this local map.
-
-- **Time/Distance Threshold**: The removal of features may also be triggered based on elapsed time or total traveled distance since the features were last observed, ensuring stale features are pruned.
+- **Local Map Reset Policy**: After new feature observations have been incorporated into the local map, the map must be pruned (or reset) for the next frame. This pruning is governed by two main policies: *Spatial* (distance-based) and *Temporal* (time-based).
+  - **Radius Threshold**: The local map is centered around the estimated camera pose. Features that fall inside a predefined spatial radius from this pose are part of this local map.
+  - **Time/Distance Threshold**: The removal of features may also be triggered based on elapsed time or total traveled distance since the features were created, ensuring stale features are pruned.
 
 </details>
 
@@ -75,8 +70,20 @@ This project and my interest in SLAM are heavily inspired by various researchers
 - Cyrill Stachniss
 - Yue Pan
 - Xingguang Zhong
+- Andrew Davison
 - Daniel Cremers
 - Luca Carlone
 - Giorgio Grisetti
+- Andreas Geiger
+- Theo Gevers
+- Martin R Oswald
+- Luc Van Gool
+- Marc Pollefeys
 - Davide Scaramuzza
 - Tiziano Guadagnino
+- Ignacio Vizzo
+- Vladimir Yugay
+- Luca Di Giammarino
+- Emanuele Giacomini
+- Sezer Karaoglu
+- Yue Li
