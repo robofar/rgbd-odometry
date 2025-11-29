@@ -121,6 +121,8 @@ class Config:
             self.name = config_args["setting"].get("name", self.name)
             self.data_loader_name = config_args["setting"].get("data_loader_name", self.data_loader_name)
             self.data_loader_seq = config_args["setting"].get("data_loader_seq", self.data_loader_seq)
+
+            self.end_frame = config_args["setting"].get("end_frame", self.end_frame)
         
         if "tracking" in config_args:
             self.track_on = config_args["tracking"].get("track_on", self.track_on)

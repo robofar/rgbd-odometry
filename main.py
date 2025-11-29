@@ -114,14 +114,10 @@ def run_pings(config_path: str = typer.Argument(help='Path to *.yaml config file
                 visualizer.log_current_gt_frame(dataset.gt_poses[frame_id])
                 visualizer.log_gt_positions(dataset.gt_poses[:frame_id+1])
                 visualizer.log_gt_trajectory(dataset.gt_poses[:frame_id+1])
-
-        print(f"Map size: {vhm.count()} feature points")
-        print(f"Local map size: {vhm.local_count()} feature points")
-        if not config.query_locally:
-            visualizer.log_global_map(vhm.map_points, vhm.map_points_rgb)
-        else:
-            visualizer.log_current_local_map(vhm.local_map_points)
             
+            visualizer.log_current_local_map(vhm.buffer_points[vhm.current_valid_mask_flat], vhm.buffer_rgb[vhm.current_valid_mask_flat])
+        
+        print(f"Number of points in map: {vhm.count()}")
         print("---------------")
 
 

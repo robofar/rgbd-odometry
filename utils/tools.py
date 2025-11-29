@@ -276,7 +276,7 @@ def transform_batch_torch(points: torch.tensor, transformation: torch.tensor):
 def skew_symmetric_batch(v):
     """
     Input: v (N, 3)
-    Output: (N, 3, 3) skew symmetric matrices
+    Output: (N, 3, 3)
     """
     N = v.shape[0]
     zeros = torch.zeros(N, device=v.device, dtype=v.dtype)

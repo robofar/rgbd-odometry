@@ -35,7 +35,6 @@ class Tracker:
     def reprojection_error_and_jacobians(self, keypoints_2D, keypoints_3D_world, K, T_w_c):
         N = keypoints_2D.shape[0]
 
-
         T_c_w = torch.linalg.inv(T_w_c) # (4,4)
 
         ones = torch.ones((N, 1), dtype=self.dtype, device=self.device)
@@ -62,7 +61,6 @@ class Tracker:
         J_hom[:, 0, 2] = -p_hom[:, 0] * z2_inv
         J_hom[:, 1, 2] = -p_hom[:, 1] * z2_inv
 
-
         J_icp = torch.zeros((N, 3, 6), dtype=self.tran_dtype, device=self.device)
         I3 = torch.eye(3, dtype=self.tran_dtype, device=self.device).unsqueeze(0).expand(N, -1, -1)
         
@@ -79,37 +77,6 @@ class Tracker:
         J = torch.bmm(temp2, J_icp)
 
         return error, J
-
-        
-
-
-
-    def construct_normal_eq(self, e: torch.Tensor, J: torch.Tensor, w: torch.Tensor):
-        """
-        e: (N,2), J: (N,2,6), w: (N,1)
-        H = J^T * J  (6,6)
-        b = -J^T * e (6,)
-        """
-
-        sqrt_w = torch.sqrt(w)
-        sqrt_w_2d = sqrt_w.repeat(1, 2)
-
-        e_w = sqrt_w_2d * e
-        J_w = sqrt_w.unsqueeze(-1) * J
-
-        e_big = e_w.reshape(-1)         # (2N,)
-        J_big = J_w.reshape(-1, 6)      # (2N, 6)
-
-        H = J_big.T @ J_big           # (6,6)
-        b = -J_big.T @ e_big         # (6,)
-
-        return H, b
-
-
-    def L1_norm_robust_kernel_weight(self, r):
-        w = 1.0 / r
-        w = w.unsqueeze(1)
-        return w
     
 
     def kabsch_umeyama(self, ref_pts, query_pts):
@@ -156,10 +123,8 @@ class Tracker:
     ):
         N = frame_keypoints_3d_camera.shape[0]
         
-
         ones = torch.ones((N, 1), device=self.device, dtype=self.dtype)
         frame_pts_cam_hom = torch.cat([frame_keypoints_3d_camera, ones], dim=1)
-        
         frame_pts_world_guess = (initial_guess_T_wc.to(dtype=self.dtype) @ frame_pts_cam_hom.T).T[:, :3]
         
         if N < min_points:
@@ -200,6 +165,12 @@ class Tracker:
         T_final = best_T_delta @ initial_guess_T_wc
         
         return T_final, best_inliers
+    
+
+    def robust_kernel_weights(self, residual: torch.Tensor, epsilon: float = 1e-9) -> torch.Tensor:
+        # Simple L1 robust kernel: w = 1 / |error|
+        w = 1.0 / (residual + epsilon)
+        return w
 
     
 
@@ -209,19 +180,16 @@ class Tracker:
             keypoints_2D, keypoints_3D_world, K, T_w_c
         )
         
-        # Kernel
         residual = torch.linalg.norm(error, dim=1) + 1e-9
-        w = 1.0 / residual
+        w = self.robust_kernel_weights(residual)
+
+        J_big = J.reshape(-1, 6) # (N,2,6) -> (2N, 6)
+        e_big = error.reshape(-1) # (N,6) -> (2N)
+
+        W = w.repeat_interleave(2).unsqueeze(1) # (N) -> (2N,1)
         
-        sqrt_w = torch.sqrt(w).unsqueeze(1).unsqueeze(2) # (N,1,1)
-        J_weighted = J * sqrt_w # (N,2,6)
-        e_weighted = error * torch.sqrt(w).unsqueeze(1) # (N,2)
-        
-        J_big = J_weighted.reshape(-1, 6)
-        e_big = e_weighted.reshape(-1)
-        
-        H = J_big.T @ J_big
-        b = -J_big.T @ e_big # Negative because b = -J^T * e
+        H = (W * J_big).T @ J_big
+        b = -(W * J_big).T @ e_big
         
         try:
             dx = torch.linalg.solve(H, b)
@@ -241,34 +209,17 @@ class Tracker:
         query_locally
     ):
         
-        # Find 3D-2D correspondences only once (using init_pose)
+        # Find 3D-2D correspondences only once
         if self.config.use_all_map_points:
-            neighb_idx, valid_neighbor_mask = self.vhm.full_nearest_neighbor_search(cur_cam, init_pose, query_locally)
+            nn_idx, has_neighbor = self.vhm.full_nearest_neighbor_search(cur_cam, init_pose)
 
-            valid_2d = cur_cam.keypoints_xy[valid_neighbor_mask]
-            valid_3d_cam = cur_cam.keypoints_xyz_cam[valid_neighbor_mask]
-
-            if query_locally:
-                valid_3d_world = self.vhm.local_map_points[neighb_idx[valid_neighbor_mask]]
-            else:
-                valid_3d_world = self.vhm.map_points[neighb_idx[valid_neighbor_mask]]
+            valid_2d = cur_cam.keypoints_xy[has_neighbor]
+            valid_3d_cam = cur_cam.keypoints_xyz_cam[has_neighbor]
+            valid_3d_world = self.vhm.buffer_points[nn_idx[has_neighbor]]
         else:
-            global_neighb_idx, valid_global_neighbor_mask = self.vhm.nearest_neighbor_search(cur_cam, init_pose)
-        
-            if query_locally:
-                local_neighb_idx = self.vhm.global2local[global_neighb_idx]
-                valid_local_neighbor_mask = (local_neighb_idx != -1)
-
-                valid_2d = cur_cam.keypoints_xy[valid_local_neighbor_mask]
-                valid_3d_world = self.vhm.local_map_points[local_neighb_idx[valid_local_neighbor_mask]]
-                valid_3d_cam = cur_cam.keypoints_xyz_cam[valid_local_neighbor_mask]
-            else:
-                valid_2d = cur_cam.keypoints_xy[valid_global_neighbor_mask]
-                valid_3d_world = self.vhm.map_points[global_neighb_idx[valid_global_neighbor_mask]]
-                valid_3d_cam = cur_cam.keypoints_xyz_cam[valid_global_neighbor_mask]
+            pass
             
         
-    
         T_ransac, inliers_idx = self.ransac_kabsch_umeyama(
             valid_3d_cam, # Points in current camera frame
             valid_3d_world, # Points in map
@@ -285,13 +236,12 @@ class Tracker:
         T_optim = T_ransac
 
         # Gauss-Newton Optimization
-        for i in range(self.config.reg_iter_n):
+        for _ in range(self.config.reg_iter_n):
             
             delta_x = self.GN(inlier_2d, inlier_3d, cur_cam.K_torch, T_optim, self.config.use_robust_kernel)
             
             if delta_x is None:
                 break
-            
 
             delta_se3 = sp.SE3.exp(delta_x.detach().cpu().numpy())
             delta_matrix = torch.tensor(delta_se3.matrix(), dtype=self.tran_dtype, device=self.device)

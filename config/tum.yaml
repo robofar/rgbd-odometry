@@ -3,5 +3,7 @@ setting:
   data_loader_name: "tum"
   data_loader_seq: "fr1xyz"
 
+  end_frame: 1000
+
 tracking:
   track_on: True

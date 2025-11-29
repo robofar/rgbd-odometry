@@ -131,17 +131,6 @@ class Visualizer:
         self._log_pointcloud("world/current_local_map", local_map, color, 0.01)
     
 
-    def log_global_map(self, global_map, color=None):
-        if isinstance(global_map, torch.Tensor):
-            global_map = self._torch_to_numpy(global_map)
-        if color is None:
-            color = np.array([255,  0, 0], dtype=np.uint8)
-        else:
-            if isinstance(color, torch.Tensor):
-                color = self._torch_to_numpy(color)
-        self._log_pointcloud("world/global_map", global_map, color, 0.01)
-    
-
     def log_frame_keypoints(self, frame_keypoints_xyz, color=None):
         if isinstance(frame_keypoints_xyz, torch.Tensor):
             frame_keypoints_xyz = self._torch_to_numpy(frame_keypoints_xyz)

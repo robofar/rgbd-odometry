@@ -182,7 +182,6 @@ class SLAMDataset(Dataset):
         self.last_pose_ref = self.cur_pose_ref  # update for the next frame
         self.last_cam = self.cur_cam
 
-        ######
 
         cur_frame_travel_dist = np.linalg.norm(self.last_odom_transformation[:3, 3])
         self.travel_dist[frame_id] = self.travel_dist[frame_id - 1] + cur_frame_travel_dist
