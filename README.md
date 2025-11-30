@@ -1,7 +1,7 @@
 # RGB-D Odometry
 
 ## 🚀 Pipeline Overview
-![Diagram of the Data Pipeline Flow](media/RGB-D%20Odometry.png?raw=true)
+![](media/RGB-D%20Odometry.png?raw=true)
 <details>
 <summary>Details (click to expand)</summary>
 The pipeline processes incoming RGB-D frames sequentially to estimate the camera pose utilizing local map of features.
