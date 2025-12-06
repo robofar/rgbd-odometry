@@ -82,8 +82,8 @@ def run_pings(config_path: str = typer.Argument(help='Path to *.yaml config file
             dataset.update_poses(frame_id, dataset.cur_pose_guess_torch)
 
 
-        travel_dist = dataset.travel_dist[:frame_id + 1]
-        vhm.travel_dist = torch.tensor(travel_dist, device=config.device, dtype=config.dtype) # always update this. needed for local map setting
+        #travel_dist = dataset.travel_dist[:frame_id + 1]
+        #vhm.travel_dist = torch.tensor(travel_dist, device=config.device, dtype=config.dtype) # always update this. needed for local map setting
 
         # III. Loop detection and pgo
         T2 = get_time()
