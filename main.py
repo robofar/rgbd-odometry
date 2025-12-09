@@ -2,6 +2,8 @@ import os
 import sys
 import time
 
+sys.path.append("./cpp/build")
+
 import torch
 
 from utils.tools import (
@@ -24,6 +26,8 @@ from utils.mapper import Mapper
 from utils.visualizer import Visualizer
 from utils.tracker import Tracker
 
+import rgbd_odometry
+
 
 app = typer.Typer(add_completion=False, rich_markup_mode="rich", context_settings={"help_option_names": ["-h", "--help"]})
 
@@ -40,10 +44,13 @@ def run_pings(config_path: str = typer.Argument(help='Path to *.yaml config file
     visualizer = None
     if config.rerun_viz_on:
         visualizer = Visualizer(config, app_id="SFVO", spawn_viewer=True)
+    
+    config_vhm_cpp = rgbd_odometry.ConfigVHM()
+    vhm_cpp = rgbd_odometry.VoxelHashMap(config_vhm_cpp) # Pass the C++ Config struct
 
     dataset = SLAMDataset(config=config)
     vhm = VoxelHashMap(config=config, viz=visualizer)
-    mapper = Mapper(config, dataset, vhm) # right now nothing special, but we can extend it to whatever mapping we want
+    mapper = Mapper(config, dataset, vhm, vhm_cpp) # right now nothing special, but we can extend it to whatever mapping we want
     tracker = Tracker(config, vhm, visualizer)
 
     for frame_id in tqdm(range(dataset.total_pc_count)):
@@ -117,7 +124,8 @@ def run_pings(config_path: str = typer.Argument(help='Path to *.yaml config file
             
             visualizer.log_current_local_map(vhm.buffer_points[vhm.current_valid_mask_flat], vhm.buffer_rgb[vhm.current_valid_mask_flat])
         
-        print(f"Number of points in map: {vhm.count()}")
+        #print(f"Number of points in map (Python): {vhm.count()}")
+        #print(f"Number of points in map (C++): {vhm_cpp.count()}")
         print("---------------")
 
 

@@ -15,11 +15,11 @@ using DescType = std::array<uint8_t, 32>; // ORB features
 // Will be filled from python Config class (while binding)
 struct ConfigVHM {
   double voxel_size = 0.5;
-  size_t max_points_per_voxel = 10;
+  size_t max_points_per_voxel = 50;
 
   // Local Map
-  double local_map_radius = 20.0;
-  int max_time_diff = 30.0;
+  double local_map_radius = 5.0;
+  int max_time_diff = 30;
 };
 
 struct MapPoint {

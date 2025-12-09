@@ -27,11 +27,13 @@ class Mapper:
         self,
         config: Config,
         dataset: SLAMDataset,
-        vhm: VoxelHashMap
+        vhm: VoxelHashMap,
+        vhm_cpp
     ):
         self.config = config
         self.dataset = dataset
         self.vhm = vhm
+        self.vhm_cpp = vhm_cpp
 
         self.silence = config.silence
         self.device = config.device
@@ -73,8 +75,14 @@ class Mapper:
         frame_origin_torch = cur_pose_torch[:3, 3]
 
         update_points = transform_torch(keypoints_xyz_torch, cur_pose_torch) # transform from local lidar frame to global frame
-        self.vhm.update(frame_id, update_points, descriptors, keypoints_rgb_torch)
 
+        self.vhm.update(frame_id, update_points, descriptors, keypoints_rgb_torch)
         self.vhm.reset_local_map(frame_id, frame_origin_torch)
+
+        self.vhm_cpp.update(frame_id, update_points.detach().cpu().numpy(), keypoints_rgb_torch.detach().cpu().numpy(), descriptors.detach().cpu().numpy())
+        self.vhm_cpp.reset_local_map(frame_id, frame_origin_torch.detach().cpu().numpy())
+        local_map_points, local_map_descriptors = self.vhm_cpp.get_local_map()
+        local_map_points = torch.from_numpy(local_map_points).to(update_points)
+        local_map_descriptors = torch.from_numpy(local_map_descriptors).to(descriptors)
 
         self.determine_mapping_poses(frame_id)

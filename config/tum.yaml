@@ -6,4 +6,4 @@ setting:
   end_frame: 1000
 
 tracking:
-  track_on: True
+  track_on: False

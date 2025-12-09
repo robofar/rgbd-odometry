@@ -95,7 +95,7 @@ class Config:
         self.pgo_on: bool = False
 
         ################# rerun visualizer
-        self.rerun_viz_on: bool = True
+        self.rerun_viz_on: bool = False
         self.world_axes_length: float = 2.0
         self.current_axes_length: float = 1.0
         self.point_radius: float = 0.02
